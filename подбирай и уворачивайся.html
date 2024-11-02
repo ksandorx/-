@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Игра</title>
+    <!-- Подключение VK Bridge -->
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+        }
+        #player {
+            width: 40px;
+            height: 40px;
+            background-color: green;
+            position: absolute;
+            border-radius: 50%;
+        }
+        .star {
+            width: 20px;
+            height: 20px;
+            background-color: yellow;
+            position: absolute;
+            border-radius: 50%;
+        }
+        .sphere {
+            width: 15px;
+            height: 15px;
+            background-color: lime;
+            position: absolute;
+            border-radius: 50%;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        #info {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 30px;
+            text-align: center;
+        }
+        #rules {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 16px;
+            max-width: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        #newGameBtn {
+            position: absolute;
+            top: calc(50% + 100px);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: green;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="player"></div>
+    <div id="score">Сферы: 0 Время: 0</div>
+    <div id="info">Осталось до удаления звезды: 10</div>
+    <div id="gameOver"></div>
+    <div id="rules">
+        <h3>Правила игры:</h3>
+        <p>1. Двигайте зеленый курсор, чтобы подбирать зеленые сферы.</p>
+        <p>2. За каждую собранную сферу вы получаете 1 очко.</p>
+        <p>3. После сбора 10 сфер исчезает одна случайная желтая звезда.</p>
+        <p>4. Если вы столкнетесь с желтой звездой, игра закончится.</p>
+        <p>5. Нажмите "Новая игра", чтобы начать заново.</p>
+    </div>
+    <button id="newGameBtn">Новая игра</button>
+
+    <!-- Ваш скрипт -->
+    <script>
+        // Инициализация VK Bridge с выводом в консоль для отладки
+        vkBridge.send('VKWebAppInit').then(() => {
+            console.log('VKWebAppInit отправлено успешно');
+        }).catch((error) => {
+            console.error('Ошибка при отправке VKWebAppInit:', error);
+        });
+
+        const player = document.getElementById('player');
+        const scoreDisplay = document.getElementById('score');
+        const infoDisplay = document.getElementById('info');
+        const gameOverDisplay = document.getElementById('gameOver');
+        const rulesDisplay = document.getElementById('rules');
+        const newGameBtn = document.getElementById('newGameBtn');
+
+        let score = 0;
+        let timeAlive = 0;
+        let starsCount = 0;
+        let gameInterval;
+        let starInterval;
+        let sphereCreationInterval;
+        let gameOver = false;
+
+        const updateScore = () => {
+            scoreDisplay.textContent = `Сферы: ${score} Время: ${timeAlive}`;
+            infoDisplay.textContent = `Осталось до удаления звезды: ${10 - (score % 10)}`;
+        };
+
+        const clearGameField = () => {
+            const stars = document.querySelectorAll('.star');
+            stars.forEach(star => star.remove());
+            const spheres = document.querySelectorAll('.sphere');
+            spheres.forEach(sphere => sphere.remove());
+        };
+
+        const createStar = () => {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.top = `${Math.random() * (window.innerHeight - 20)}px`;
+            star.style.left = `${Math.random() * (window.innerWidth - 20)}px`;
+            document.body.appendChild(star);
+            starsCount++;
+            moveStar(star);
+        };
+
+        const moveStar = (star) => {
+            let dx = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 2 + 0.5);
+            let dy = (Math.random() < 0.5 ? 1 : -1) * (Math.random() * 2 + 0.5);
+
+            const move = () => {
+                const rect = star.getBoundingClientRect();
+                if (rect.top + dy < 0 || rect.bottom + dy > window.innerHeight) dy *= -1;
+                if (rect.left + dx < 0 || rect.right + dx > window.innerWidth) dx *= -1;
+
+                star.style.top = `${rect.top + dy}px`;
+                star.style.left = `${rect.left + dx}px`;
+
+                if (!gameOver) requestAnimationFrame(move);
+            };
+            requestAnimationFrame(move);
+        };
+
+        const createSpheres = (count) => {
+            for (let i = 0; i < count; i++) {
+                const sphere = document.createElement('div');
+                sphere.className = 'sphere';
+                sphere.style.top = `${Math.random() * (window.innerHeight - 15)}px`;
+                sphere.style.left = `${Math.random() * (window.innerWidth - 15)}px`;
+                document.body.appendChild(sphere);
+            }
+        };
+
+        const checkCollision = (object) => {
+            const rect1 = player.getBoundingClientRect();
+            const rect2 = object.getBoundingClientRect();
+            return !(
+                rect1.top > rect2.bottom ||
+                rect1.bottom < rect2.top ||
+                rect1.left > rect2.right ||
+                rect1.right < rect2.left
+            );
+        };
+
+        const collectSpheres = () => {
+            const spheres = document.querySelectorAll('.sphere');
+            spheres.forEach(sphere => {
+                if (checkCollision(sphere)) {
+                    sphere.remove();
+                    score++;
+                    updateScore();
+                    if (score % 10 === 0) removeRandomStar();
+                }
+            });
+        };
+
+        const removeRandomStar = () => {
+            const stars = document.querySelectorAll('.star');
+            if (stars.length > 0) {
+                const randomStar = stars[Math.floor(Math.random() * stars.length)];
+                randomStar.remove();
+                starsCount--;
+            }
+        };
+
+        const gameLoop = () => {
+            timeAlive++;
+            updateScore();
+            collectSpheres();
+
+            const stars = document.querySelectorAll('.star');
+            stars.forEach(star => {
+                if (checkCollision(star)) {
+                    gameOver = true;
+                    clearInterval(gameInterval);
+                    clearInterval(starInterval);
+                    clearInterval(sphereCreationInterval);
+                    gameOverDisplay.textContent = `Игра окончена! Ваши очки: ${score}`;
+                    gameOverDisplay.style.display = 'block';
+                    rulesDisplay.style.display = 'none';
+                    newGameBtn.style.display = 'block';
+                }
+            });
+        };
+
+        const startGame = () => {
+            clearGameField();
+            gameOver = false;
+            score = 0;
+            timeAlive = 0;
+            starsCount = 0;
+            gameOverDisplay.style.display = 'none';
+            rulesDisplay.style.display = 'none';
+            newGameBtn.style.display = 'none';
+            updateScore();
+
+            // Создать 3 желтые звезды
+            for (let i = 0; i < 3; i++) {
+                createStar();
+            }
+
+            // Создать 15 зеленых сфер сразу
+            createSpheres(15);
+
+            // Установить интервал для создания 15 зеленых сфер каждые 5 секунд
+            clearInterval(sphereCreationInterval);
+            sphereCreationInterval = setInterval(() => {
+                createSpheres(15);
+            }, 5000);
+
+            // Установить интервал для создания 2 желтых звезд каждые 5 секунд
+            starInterval = setInterval(() => {
+                createStar();
+                createStar();
+            }, 5000);
+
+            gameInterval = setInterval(gameLoop, 1000);
+        };
+
+        newGameBtn.addEventListener('click', () => {
+            startGame();
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            player.style.top = `${event.clientY - 20}px`;
+            player.style.left = `${event.clientX - 20}px`;
+            collectSpheres();
+        });
+
+        document.addEventListener('touchmove', (event) => {
+            const touch = event.touches[0];
+            player.style.top = `${touch.clientY - 20}px`;
+            player.style.left = `${touch.clientX - 20}px`;
+            collectSpheres();
+            event.preventDefault();
+        });
+
+        // Показать кнопку "Новая игра" при загрузке
+        newGameBtn.style.display = 'block';
+    </script>
+</body>
+</html>
